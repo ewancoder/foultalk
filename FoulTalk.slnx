@@ -1,3 +1,4 @@
 ﻿<Solution>
   <Project Path="FoulTalk.Api\FoulTalk.Api.csproj" Type="Classic C#" />
+  <Project Path="FoulTalk.Domain\FoulTalk.Domain.csproj" Type="Classic C#" />
 </Solution>
