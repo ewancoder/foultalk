@@ -1,3 +1,4 @@
+using FoulTalk.Api;
 using Tyr.Framework;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,5 +17,6 @@ await builder.ConfigureTyrApplicationBuilderAsync(config);
 var app = builder.Build();
 
 app.ConfigureTyrApplication(config);
+app.AddFoulTalkApi();
 
 await app.RunAsync();
