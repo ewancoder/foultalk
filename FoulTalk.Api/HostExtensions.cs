@@ -41,6 +41,7 @@ public sealed record TyrHostConfiguration(
     TimeSpan AuthCookieExpiration,
     string JwtIssuer,
     string JwtAudience,
+    string MachineAuthenticationAuthority,
     string SeqUri,
     string SeqApiKey,
     string LogVerboseNamespace,
@@ -87,6 +88,7 @@ public sealed record TyrHostConfiguration(
             AuthCookieExpiration: TimeSpan.FromDays(1.8),
             JwtIssuer: "https://accounts.google.com",
             JwtAudience: TryReadConfig("JwtAudience", configuration) ?? "400839590162-24pngke3ov8rbi2f3forabpaufaosldg.apps.googleusercontent.com",
+            MachineAuthenticationAuthority: TryReadConfig("MachineAuthenticationAuthority", configuration) ?? "https://auth.typingrealm.com",
             SeqUri: isDebug ? string.Empty : ReadConfig("SeqUri", configuration),
             SeqApiKey: isDebug ? string.Empty : ReadConfig("SeqApiKey", configuration),
             LogVerboseNamespace: appNamespace,
@@ -111,6 +113,7 @@ public sealed record TyrHostConfiguration(
 
 public static class HostExtensions
 {
+    public static readonly string ConsoleLogOutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}{NewLine}{Message:lj}{NewLine}{Exception}{NewLine}";
     public static async ValueTask ConfigureTyrApplicationBuilderAsync(
         this WebApplicationBuilder builder, TyrHostConfiguration config)
     {
@@ -212,6 +215,12 @@ public static class HostExtensions
                                 authProperties).ConfigureAwait(false);
                         }
                     };
+                })
+                .AddJwtBearer("MachineScheme", options =>
+                {
+                    options.Authority = config.MachineAuthenticationAuthority;
+                    options.RequireHttpsMetadata = false;
+                    options.TokenValidationParameters.ValidateAudience = false;
                 });
         }
 
@@ -221,8 +230,11 @@ public static class HostExtensions
             {
                 seqConfig
                     .MinimumLevel.Information()
+                    .MinimumLevel.Override("Tyr", LogEventLevel.Verbose)
                     .MinimumLevel.Override(config.LogVerboseNamespace, LogEventLevel.Verbose)
-                    .WriteTo.Console();
+                    .WriteTo.Console(outputTemplate: ConsoleLogOutputTemplate)
+                    .Enrich.FromLogContext()
+                    .ReadFrom.Configuration(context.Configuration);
 
                 if (!config.IsDebug)
                 {
@@ -237,6 +249,9 @@ public static class HostExtensions
     public static void ConfigureTyrApplication(
         this WebApplication app, TyrHostConfiguration config)
     {
+        // Log request information with Serilog.
+        app.UseSerilogRequestLogging();
+
         var logger = app.Services.GetRequiredService<ILogger<TyrHostConfiguration>>();
         app.MapOpenApi(); // OpenAPI document.
         app.MapScalarApiReference("docs"); // Scalar on "/docs" url.
@@ -290,6 +305,36 @@ public static class HostExtensions
             .WithTags("Diagnostics")
             .WithSummary("Show diagnostics information")
             .WithDescription("Shows current UTC time of this API pod");
+
+        app.MapGet("/diag/auth", () => DateTime.UtcNow)
+            .WithTags("Diagnostics")
+            .WithSummary("Show diagnostics information")
+            .WithDescription("Shows current UTC time of this API pod")
+            .RequireAuthorization(policy =>
+            {
+                policy.AuthenticationSchemes = [ JwtBearerDefaults.AuthenticationScheme, "MachineScheme" ];
+                policy.RequireAuthenticatedUser();
+            });
+
+        app.MapGet("/diag/auth/machine", () => DateTime.UtcNow)
+            .WithTags("Diagnostics")
+            .WithSummary("Show diagnostics information")
+            .WithDescription("Shows current UTC time of this API pod")
+            .RequireAuthorization(policy =>
+            {
+                policy.AuthenticationSchemes = [ "MachineScheme" ];
+                policy.RequireAuthenticatedUser();
+            });
+
+        app.MapGet("/diag/auth/user", () => DateTime.UtcNow)
+            .WithTags("Diagnostics")
+            .WithSummary("Show diagnostics information")
+            .WithDescription("Shows current UTC time of this API pod")
+            .RequireAuthorization(policy =>
+            {
+                policy.AuthenticationSchemes = [ JwtBearerDefaults.AuthenticationScheme ];
+                policy.RequireAuthenticatedUser();
+            });
     }
 
     // Hacky implementation to reuse the code.
