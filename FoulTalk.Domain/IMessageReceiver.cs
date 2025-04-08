@@ -5,7 +5,7 @@
 /// </summary>
 public interface IMessageSender
 {
-    ValueTask SendMessageAsync(string message);
+    ValueTask SendMessageAsync(ConversationMessage message);
 }
 
 /// <summary>
@@ -13,7 +13,22 @@ public interface IMessageSender
 /// </summary>
 public interface IMessageReceiver
 {
-    ValueTask ReceiveMessageAsync(ReceivedMessage message);
+    ValueTask ReceiveMessageAsync(ReceivedMessage receivedMessage);
+}
+
+internal class TestMessageHandler : IMessageSender, IMessageReceiver
+{
+    public ValueTask SendMessageAsync(ConversationMessage message)
+    {
+        Console.WriteLine("Sending message to the human: " + message.Value);
+        return default;
+    }
+
+    public ValueTask ReceiveMessageAsync(ReceivedMessage receivedMessage)
+    {
+        Console.WriteLine("Processing received from human message: " + receivedMessage.Value);
+        return default;
+    }
 }
 
 public enum MessageType
@@ -31,9 +46,9 @@ public enum MessageType
     System = 2,
 
     /// <summary>
-    /// Updates character ambient information, does not expect a reply.
+    /// Updates character memory, does not expect a reply.
     /// </summary>
-    UpdateCharacter = 3
+    UpdateCharacterMemory = 3
 }
 
 public sealed record ConversationParticipant(string Id, string Name)
@@ -41,19 +56,23 @@ public sealed record ConversationParticipant(string Id, string Name)
     public static ConversationParticipant System => new("System", "System");
 }
 
+public sealed record ConversationMessage(string Value);
+
 public sealed class ReceivedMessage
 {
-    private ReceivedMessage(string value, MessageType messageType, bool expectingReply, ConversationParticipant from)
+    private ReceivedMessage(
+        string value,
+        MessageType messageType,
+        bool expectingReply,
+        ConversationParticipant from)
     {
         Value = value;
         MessageType = messageType;
-        ExpectingReply = expectingReply;
         From = from;
     }
 
     public string Value { get; }
     public MessageType MessageType { get; }
-    public bool ExpectingReply { get; }
     public ConversationParticipant From { get; }
 
     public static ReceivedMessage Conversation(string value, ConversationParticipant from) => new(
@@ -63,5 +82,5 @@ public sealed class ReceivedMessage
         value, MessageType.System, true, from);
 
     public static ReceivedMessage UpdateCharacter(string value) => new(
-        value, MessageType.UpdateCharacter, false, ConversationParticipant.System);
+        value, MessageType.UpdateCharacterMemory, false, ConversationParticipant.System);
 }
